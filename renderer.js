@@ -10,14 +10,57 @@ let isMonitoring = false;
 let currentFilter = 'all';
 const MAX_EVENTS = 100;
 
+// Webhook Configuration
+let webhookConfig = {
+    enabled: false,
+    method: 'POST',
+    baseUrl: '',
+    universeId: '',
+    headers: {},
+    events: {
+        gift: true,
+        chat: false,
+        member: false,
+        like: false,
+        follow: false
+    },
+    topic: 'TIKTOK_EVENT',
+    bodyTemplate: '{"topic": "{topic}", "message": "{username}:{message}:{amount}"}'
+};
+
 // DOM Elements
 const usernameInput = document.getElementById('username-input');
 const startBtn = document.getElementById('start-btn');
 const stopBtn = document.getElementById('stop-btn');
 const clearBtn = document.getElementById('clear-btn');
+const webhookBtn = document.getElementById('webhook-btn');
 const statusBar = document.getElementById('status-bar');
 const eventContainer = document.getElementById('event-container');
 const filterButtons = document.querySelectorAll('.filter-btn');
+const webhookIndicator = document.getElementById('webhook-indicator');
+
+// Modal Elements
+const webhookModal = document.getElementById('webhook-modal');
+const modalClose = document.getElementById('modal-close');
+const saveWebhookBtn = document.getElementById('save-webhook-btn');
+const testWebhookBtn = document.getElementById('test-webhook-btn');
+
+const webhookEnabled = document.getElementById('webhook-enabled');
+const webhookMethod = document.getElementById('webhook-method');
+const webhookUrl = document.getElementById('webhook-url');
+const webhookUniverseId = document.getElementById('webhook-universe-id');
+const webhookHeaders = document.getElementById('webhook-headers');
+const webhookTopic = document.getElementById('webhook-topic');
+const webhookBodyTemplate = document.getElementById('webhook-body-template');
+const testResult = document.getElementById('test-result');
+
+const webhookEventCheckboxes = {
+    gift: document.getElementById('webhook-event-gift'),
+    chat: document.getElementById('webhook-event-chat'),
+    member: document.getElementById('webhook-event-member'),
+    like: document.getElementById('webhook-event-like'),
+    follow: document.getElementById('webhook-event-follow')
+};
 
 const statElements = {
     chat: document.getElementById('chat-count'),
@@ -30,6 +73,10 @@ const statElements = {
 startBtn.addEventListener('click', startMonitoring);
 stopBtn.addEventListener('click', stopMonitoring);
 clearBtn.addEventListener('click', clearEvents);
+webhookBtn.addEventListener('click', openWebhookModal);
+modalClose.addEventListener('click', closeWebhookModal);
+saveWebhookBtn.addEventListener('click', saveWebhookConfig);
+testWebhookBtn.addEventListener('click', testWebhook);
 
 usernameInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !isMonitoring) {
@@ -45,10 +92,20 @@ filterButtons.forEach(btn => {
     });
 });
 
+// Close modal when clicking outside
+webhookModal.addEventListener('click', (e) => {
+    if (e.target === webhookModal) {
+        closeWebhookModal();
+    }
+});
+
 // Listen to TikTok events
 window.electronAPI.onTikTokEvent((event) => {
     handleTikTokEvent(event.type, event.data);
 });
+
+// Load saved webhook config on startup
+loadWebhookConfig();
 
 // Functions
 async function startMonitoring() {
@@ -121,7 +178,6 @@ function applyFilter() {
         if (currentFilter === 'all') {
             event.style.display = '';
         } else {
-            // Check if event has the filter class
             if (event.classList.contains(currentFilter)) {
                 event.style.display = '';
             } else {
@@ -158,7 +214,6 @@ function updateStatus(state, message, info = '') {
     const statusText = statusIndicator.querySelector('.status-text');
     const statusInfo = statusBar.querySelector('.status-info');
 
-    // Remove all state classes
     statusDot.classList.remove('idle', 'connecting', 'connected', 'error');
     statusDot.classList.add(state);
 
@@ -166,12 +221,24 @@ function updateStatus(state, message, info = '') {
     statusInfo.textContent = info;
 }
 
+function updateWebhookIndicator() {
+    const webhookDot = webhookIndicator.querySelector('.webhook-dot');
+    const webhookText = webhookIndicator.querySelector('.webhook-text');
+    
+    if (webhookConfig.enabled) {
+        webhookDot.classList.add('active');
+        webhookText.textContent = 'Webhook: Active';
+    } else {
+        webhookDot.classList.remove('active');
+        webhookText.textContent = 'Webhook: Off';
+    }
+}
+
 function updateStat(type, value) {
     if (statElements[type]) {
         const element = statElements[type];
         element.textContent = value;
         
-        // Add pulse animation
         element.style.animation = 'none';
         setTimeout(() => {
             element.style.animation = 'pulse-value 0.5s ease';
@@ -180,7 +247,6 @@ function updateStat(type, value) {
 }
 
 function addEvent(type, data) {
-    // Remove empty state if exists
     const emptyState = eventContainer.querySelector('.empty-state');
     if (emptyState) {
         emptyState.remove();
@@ -241,6 +307,10 @@ function addEvent(type, data) {
             typeLabel = 'SYSTEM';
             content = escapeHtml(data.message);
             break;
+        case 'webhook':
+            typeLabel = 'WEBHOOK';
+            content = `<span class="event-highlight">Sent to webhook</span>: ${escapeHtml(data.event)}`;
+            break;
         default:
             content = JSON.stringify(data);
     }
@@ -255,17 +325,14 @@ function addEvent(type, data) {
 
     eventContainer.insertBefore(eventItem, eventContainer.firstChild);
 
-    // Apply current filter to new event
     if (currentFilter !== 'all' && !eventItem.classList.contains(currentFilter)) {
         eventItem.style.display = 'none';
     }
 
-    // Limit events
     while (eventContainer.children.length > MAX_EVENTS) {
         eventContainer.removeChild(eventContainer.lastChild);
     }
 
-    // Auto scroll to top for new events (only if filter matches)
     if (currentFilter === 'all' || eventItem.classList.contains(currentFilter)) {
         eventContainer.scrollTop = 0;
     }
@@ -314,8 +381,248 @@ function handleTikTokEvent(type, data) {
             break;
     }
 
+    // Send to webhook if enabled and event type is selected
+    if (webhookConfig.enabled && webhookConfig.events[type]) {
+        sendToWebhook(type, data);
+    }
+
     // Add to event feed
     addEvent(type, data);
+}
+
+// Webhook Functions
+function buildWebhookUrl() {
+    let url = webhookConfig.baseUrl;
+    
+    if (webhookConfig.universeId) {
+        url = url.replace('{universeId}', webhookConfig.universeId);
+    }
+    
+    if (webhookConfig.topic) {
+        url = url.replace('{topic}', webhookConfig.topic);
+    }
+    
+    return url;
+}
+
+function buildWebhookBody(type, data) {
+    // Get the template
+    let template = webhookConfig.bodyTemplate || '{"topic": "{topic}", "message": "{username}:{message}:{amount}"}';
+    
+    // Prepare variables based on event type
+    let variables = {
+        topic: webhookConfig.topic || 'TIKTOK_EVENT',
+        eventType: type,
+        username: data.username || 'unknown',
+        timestamp: data.timestamp || new Date().toISOString(),
+        message: '',
+        amount: 0
+    };
+    
+    // Set message and amount based on event type
+    switch (type) {
+        case 'gift':
+            variables.message = data.giftName || 'Unknown Gift';
+            variables.amount = data.diamondCount || 0;
+            variables.giftName = data.giftName || 'Unknown Gift';
+            variables.diamondCount = data.diamondCount || 0;
+            break;
+        case 'chat':
+            variables.message = data.comment || '';
+            variables.amount = 0;
+            variables.comment = data.comment || '';
+            break;
+        case 'member':
+            variables.message = data.action || 'joined';
+            variables.amount = 0;
+            variables.action = data.action || 'joined';
+            break;
+        case 'like':
+            variables.message = 'liked';
+            variables.amount = data.likeCount || 1;
+            variables.likeCount = data.likeCount || 1;
+            break;
+        case 'follow':
+            variables.message = 'followed';
+            variables.amount = 0;
+            break;
+        default:
+            variables.message = type;
+            variables.amount = 0;
+    }
+    
+    // Replace all placeholders in the template
+    let bodyString = template;
+    for (const [key, value] of Object.entries(variables)) {
+        const regex = new RegExp(`\\{${key}\\}`, 'g');
+        bodyString = bodyString.replace(regex, value);
+    }
+    
+    // Try to parse as JSON, if it fails return as string
+    try {
+        return JSON.parse(bodyString);
+    } catch (error) {
+        console.warn('Body template is not valid JSON, sending as string:', error);
+        return bodyString;
+    }
+}
+
+async function sendToWebhook(type, data) {
+    if (!webhookConfig.enabled || !webhookConfig.baseUrl) {
+        return;
+    }
+    
+    try {
+        const url = buildWebhookUrl();
+        const body = buildWebhookBody(type, data);
+        
+        const response = await fetch(url, {
+            method: webhookConfig.method,
+            headers: webhookConfig.headers,
+            body: JSON.stringify(body)
+        });
+        
+        if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            console.error(`Webhook failed: ${response.status} ${response.statusText}: ${text}`);
+            
+            addEvent('webhook', {
+                event: `Failed - ${type}`,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            console.log(`Webhook sent successfully: ${type}`);
+            
+            addEvent('webhook', {
+                event: `Success - ${type}`,
+                timestamp: new Date().toISOString()
+            });
+        }
+    } catch (error) {
+        console.error('Webhook error:', error);
+        
+        addEvent('webhook', {
+            event: `Error - ${error.message}`,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
+async function testWebhook() {
+    testResult.textContent = 'Testing...';
+    testResult.className = 'test-result testing';
+    
+    try {
+        const testConfig = {
+            method: webhookMethod.value,
+            baseUrl: webhookUrl.value,
+            universeId: webhookUniverseId.value,
+            topic: webhookTopic.value,
+            headers: JSON.parse(webhookHeaders.value || '{}')
+        };
+        
+        const tempConfig = { ...webhookConfig };
+        webhookConfig = { ...webhookConfig, ...testConfig, enabled: true };
+        
+        const testData = {
+            username: 'TestUser',
+            giftName: 'TestGift',
+            diamondCount: 100,
+            timestamp: new Date().toISOString()
+        };
+        
+        await sendToWebhook('gift', testData);
+        
+        webhookConfig = tempConfig;
+        
+        testResult.textContent = '✓ Test sent successfully';
+        testResult.className = 'test-result success';
+        
+        setTimeout(() => {
+            testResult.textContent = '';
+        }, 3000);
+    } catch (error) {
+        testResult.textContent = `✗ Error: ${error.message}`;
+        testResult.className = 'test-result error';
+    }
+}
+
+function openWebhookModal() {
+    webhookModal.style.display = 'flex';
+    loadWebhookToUI();
+}
+
+function closeWebhookModal() {
+    webhookModal.style.display = 'none';
+}
+
+function loadWebhookToUI() {
+    webhookEnabled.checked = webhookConfig.enabled;
+    webhookMethod.value = webhookConfig.method;
+    webhookUrl.value = webhookConfig.baseUrl;
+    webhookUniverseId.value = webhookConfig.universeId;
+    webhookHeaders.value = JSON.stringify(webhookConfig.headers, null, 2);
+    webhookTopic.value = webhookConfig.topic;
+    webhookBodyTemplate.value = webhookConfig.bodyTemplate || '{"topic": "{topic}", "message": "{username}:{message}:{amount}"}';
+    
+    Object.keys(webhookEventCheckboxes).forEach(key => {
+        if (webhookEventCheckboxes[key]) {
+            webhookEventCheckboxes[key].checked = webhookConfig.events[key] || false;
+        }
+    });
+}
+
+function saveWebhookConfig() {
+    try {
+        webhookConfig.enabled = webhookEnabled.checked;
+        webhookConfig.method = webhookMethod.value;
+        webhookConfig.baseUrl = webhookUrl.value;
+        webhookConfig.universeId = webhookUniverseId.value;
+        webhookConfig.headers = JSON.parse(webhookHeaders.value || '{}');
+        webhookConfig.topic = webhookTopic.value;
+        webhookConfig.bodyTemplate = webhookBodyTemplate.value;
+        
+        // Validate body template is valid JSON
+        try {
+            const testBody = webhookConfig.bodyTemplate.replace(/\{[^}]+\}/g, '""');
+            JSON.parse(testBody);
+        } catch (error) {
+            if (!confirm('Body template may not be valid JSON. Save anyway?')) {
+                return;
+            }
+        }
+        
+        Object.keys(webhookEventCheckboxes).forEach(key => {
+            if (webhookEventCheckboxes[key]) {
+                webhookConfig.events[key] = webhookEventCheckboxes[key].checked;
+            }
+        });
+        
+        // Save to localStorage
+        localStorage.setItem('webhookConfig', JSON.stringify(webhookConfig));
+        
+        updateWebhookIndicator();
+        closeWebhookModal();
+        
+        addEvent('system', {
+            message: 'Webhook configuration saved',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        alert(`Error saving config: ${error.message}`);
+    }
+}
+
+function loadWebhookConfig() {
+    try {
+        const saved = localStorage.getItem('webhookConfig');
+        if (saved) {
+            webhookConfig = { ...webhookConfig, ...JSON.parse(saved) };
+            updateWebhookIndicator();
+        }
+    } catch (error) {
+        console.error('Error loading webhook config:', error);
+    }
 }
 
 function escapeHtml(text) {
@@ -337,3 +644,4 @@ document.head.appendChild(style);
 
 // Initialize
 updateStatus('idle', 'Idle');
+updateWebhookIndicator();

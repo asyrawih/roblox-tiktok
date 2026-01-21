@@ -55,6 +55,10 @@
                         <span class="btn-icon">◼</span>
                         <span class="btn-text">Stop</span>
                     </button>
+                    <button id="webhook-btn" class="btn btn-config">
+                        <span class="btn-icon">⚙</span>
+                        <span class="btn-text">Webhook</span>
+                    </button>
                 </div>
 
                 <div id="status-bar" class="status-bar">
@@ -63,9 +67,148 @@
                         <span class="status-text">Idle</span>
                     </div>
                     <div class="status-info"></div>
+                    <div class="webhook-indicator" id="webhook-indicator">
+                        <span class="webhook-dot"></span>
+                        <span class="webhook-text">Webhook: Off</span>
+                    </div>
                 </div>
             </div>
         </section>
+
+        <!-- Webhook Configuration Modal -->
+        <div id="webhook-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title">
+                        <span class="modal-icon">🔗</span>
+                        Webhook Configuration
+                    </h2>
+                    <button class="modal-close" id="modal-close">×</button>
+                </div>
+                
+                <div class="modal-body">
+                    <!-- Enable/Disable Toggle -->
+                    <div class="config-row">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="webhook-enabled" class="toggle-input">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-text">Enable Webhook</span>
+                        </label>
+                    </div>
+
+                    <!-- HTTP Method -->
+                    <div class="config-row">
+                        <label class="config-label">HTTP Method</label>
+                        <select id="webhook-method" class="config-select">
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+
+                    <!-- Base URL -->
+                    <div class="config-row">
+                        <label class="config-label">Base URL</label>
+                        <input 
+                            type="text" 
+                            id="webhook-url" 
+                            class="config-input"
+                            placeholder="https://apis.roblox.com/cloud/v2/universes/{universeId}:publishMessage"
+                        />
+                        <span class="config-hint">Use {universeId}, {topic} as placeholders</span>
+                    </div>
+
+                    <!-- Universe ID (Roblox specific) -->
+                    <div class="config-row">
+                        <label class="config-label">Universe ID (Optional)</label>
+                        <input 
+                            type="text" 
+                            id="webhook-universe-id" 
+                            class="config-input"
+                            placeholder="9002562838"
+                        />
+                    </div>
+
+                    <!-- Headers -->
+                    <div class="config-row">
+                        <label class="config-label">Headers (JSON)</label>
+                        <textarea 
+                            id="webhook-headers" 
+                            class="config-textarea"
+                            placeholder='{"Content-Type": "application/json", "X-Api-Key": "your-api-key"}'
+                            rows="4"
+                        ></textarea>
+                        <span class="config-hint">Must be valid JSON format</span>
+                    </div>
+
+                    <!-- Event Types to Send -->
+                    <div class="config-row">
+                        <label class="config-label">Send Events</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="webhook-event-gift" checked>
+                                <span>🎁 Gifts</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="webhook-event-chat">
+                                <span>💬 Chat</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="webhook-event-member">
+                                <span>👥 Members</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="webhook-event-like">
+                                <span>❤️ Likes</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="webhook-event-follow">
+                                <span>➕ Follows</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Topic/Message Template -->
+                    <div class="config-row">
+                        <label class="config-label">Topic (for Roblox)</label>
+                        <input 
+                            type="text" 
+                            id="webhook-topic" 
+                            class="config-input"
+                            placeholder="DONATION"
+                            value="TIKTOK_EVENT"
+                        />
+                    </div>
+
+                    <!-- Body Template -->
+                    <div class="config-row">
+                        <label class="config-label">Request Body Template (JSON)</label>
+                        <textarea 
+                            id="webhook-body-template" 
+                            class="config-textarea"
+                            placeholder='{"topic": "{topic}", "message": "{username}:{message}:{amount}"}'
+                            rows="6"
+                        ></textarea>
+                        <span class="config-hint">Available placeholders: {topic}, {username}, {message}, {amount}, {eventType}, {timestamp}</span>
+                    </div>
+
+                    <!-- Test Webhook -->
+                    <div class="config-row">
+                        <button id="test-webhook-btn" class="btn btn-test">
+                            <span class="btn-icon">🧪</span>
+                            <span class="btn-text">Test Webhook</span>
+                        </button>
+                        <span id="test-result" class="test-result"></span>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button id="save-webhook-btn" class="btn btn-primary">
+                        <span class="btn-text">Save Configuration</span>
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Stats Dashboard -->
         <section class="stats-dashboard">
