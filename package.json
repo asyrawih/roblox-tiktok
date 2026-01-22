@@ -28,9 +28,10 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        "msi"
       ],
-      "icon": "icon.ico"
+      "icon": "icon.ico",
+      "legalTrademarks": "Kelas Malam"
     },
     "mac": {
       "target": [
