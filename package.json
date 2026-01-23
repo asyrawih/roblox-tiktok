@@ -30,20 +30,20 @@
       "target": [
         "msi"
       ],
-      "icon": "icon.ico",
+      "icon": "./build/icons/win/icon.ico",
       "legalTrademarks": "Kelas Malam"
     },
     "mac": {
       "target": [
         "dmg"
       ],
-      "icon": "icon.icns"
+      "icon": "./build/icons/mac/icon.icns"
     },
     "linux": {
       "target": [
         "AppImage"
       ],
-      "icon": "icon.png"
+      "icon": "./build/icons/png/256x256.png"
     }
   },
   "keywords": [
