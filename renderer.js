@@ -291,6 +291,20 @@ function addEvent(type, data) {
             typeLabel = 'SYSTEM';
             content = `Attempting to connect to <span class="event-highlight">@${data.username}</span>...`;
             break;
+        case 'not-live':
+            typeLabel = 'INFO';
+            content = `User is not currently live. Will connect automatically when stream starts.`;
+            break;
+        case 'connection-failed':
+            // Only show connection failed if it's a retry (attempt > 1)
+            if (data.attempt && data.attempt > 1) {
+                typeLabel = 'WARNING';
+                content = `Connection attempt ${data.attempt} failed: ${escapeHtml(data.error)}`;
+            } else {
+                // Skip displaying first attempt failures
+                return;
+            }
+            break;
         case 'disconnected':
             typeLabel = 'DISCONNECTED';
             content = 'Stream connection lost';
@@ -368,6 +382,15 @@ function handleTikTokEvent(type, data) {
             break;
         case 'connecting':
             updateStatus('connecting', 'Connecting...', data.username);
+            break;
+        case 'not-live':
+            updateStatus('error', 'Not Live', 'Waiting for stream to start...');
+            break;
+        case 'connection-failed':
+            // Only show error if it's not the first attempt (connection likely won't succeed)
+            if (data.attempt > 1) {
+                updateStatus('error', 'Connection Failed', data.error);
+            }
             break;
         case 'disconnected':
         case 'closed':
